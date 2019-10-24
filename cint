@@ -1,0 +1,206 @@
+#!/usr/bin/env python3
+
+# Copyright 2019 Matheus Tavares <matheus.bernardino@usp.br>
+#
+# cint is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, version 2 only of the License.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program (./LICENSE). If not, see
+# <https://www.gnu.org/licenses/>.
+
+import sys
+import re
+import math
+import statistics
+from scipy.stats import t as t_dist
+import argparse
+from os.path import basename
+
+def join_from_1_with_format(format, array):
+    return "".join([format.format(i+1, e) for i, e in enumerate(array)])
+
+PROG_DESCRIPTION=(
+    "Reads numbers from stdin and prints their mean with "
+    "confidence interval.\nThe input format must be a sequence "
+    "of two or more valid floats separated by\none or more of: "
+    "\\s, \\n, ',' or ';'."
+)
+
+PREDEFINED_FORMATS=(
+    "%M ± %E (confidence of %C)",
+    "[%L, %U] (confidence of %C)",
+    "%L, %U",
+    "With %c%% of confidence, the population mean is between %L and %U."
+)
+
+DEFAULT_OUTFORMAT=PREDEFINED_FORMATS[0]
+
+HELP_EPILOG=(
+    "output format:\nThe following format tokens are are recognized "
+    "and properly replaced:\n"
+    "  %M: sample mean\n"
+    "  %S: sample standard deviation\n"
+    "  %E: margin of error\n"
+    "  %L: lower limit of the confidence interval\n"
+    "  %U: upper limit of the confidente interval\n"
+    "  %C: the confidence level used as decimal\n"
+    "  %c: the confidence level as a percentage\n"
+    "  %[1-{}]: use one of the predefined formats (see bellow)\n"
+    "  %%: a single '%' character\n"
+    "\n"
+    "predefined formats:\n{}"
+).format(len(PREDEFINED_FORMATS),
+         join_from_1_with_format("  %{}: '{}'\n", PREDEFINED_FORMATS))
+
+
+def die(message, code=1):
+    print("fatal: {}".format(str(message)), file=sys.stderr)
+    sys.exit(code)
+
+def read_numbers_from_fd(fd):
+    numbers = []
+    try:
+        for line in fd:
+            for element in re.split('[ ,;]+', line.rstrip()):
+                if element != "":
+                    numbers.append(float(element))
+    except Exception as e:
+        print(str(e))
+        die("invalid input format. Must be numbers only, separated by \\s, \\n or ','.")
+    if len(numbers) < 2:
+        die("a minimum of two numbers must be given")
+    return numbers
+
+def read_numbers(filename):
+    if filename is None:
+        return read_numbers_from_fd(sys.stdin)
+
+    try:
+        fd = open(filename, 'r')
+    except Exception as e:
+        die(str(e))
+
+    numbers = read_numbers_from_fd(fd)
+
+    close(fd)
+    return numbers
+
+def get_t_value(degrees, confidence=0.95):
+    return t_dist.ppf((1 + confidence) / 2, degrees)
+
+def calc_statistics(numbers, confidence):
+    mean = statistics.mean(numbers)
+    stdev = statistics.stdev(numbers)
+    size = len(numbers)
+    t_value = get_t_value(size - 1, confidence)
+    margin = t_value * stdev / math.sqrt(size)
+    return {'mean': mean, 'stdev': stdev, 'margin': margin,
+            'confidence': confidence}
+
+def stats_to_rounded_str(stats, digits):
+    mean, margin = stats['mean'], stats['margin']
+    stats['lower'], stats['upper'] = mean - margin, mean + margin
+    stats['confidence_percentage'] = stats['confidence'] * 100
+    def format_value(v):
+        return str(v) if digits < 0 else str(round(v, digits)) 
+    return {k: format_value(v) for k, v in stats.items()}
+
+def format_stats_from_predefined(index, stats):
+    real_index = index - 1
+    if real_index >= len(PREDEFINED_FORMATS) or real_index < 0:
+        die(("malformed outformat string: out of bounds predefined index"
+             " '{}'.".format(index)))
+    return format_stats(stats, PREDEFINED_FORMATS[real_index])
+
+def format_stats(stats, outformat):
+    out = ""
+    percents = 0
+    for c in outformat:
+        if c == '%':
+            percents += 1
+        elif percents % 2 == 1:
+            out += "%" * (percents // 2)
+            percents = 0
+            if c == 'M': out += stats['mean']
+            elif c == 'S': out += stats['stdev']
+            elif c == 'E': out += stats['margin']
+            elif c == 'L': out += stats['lower']
+            elif c == 'U': out += stats['upper']
+            elif c == 'C': out += stats['confidence']
+            elif c == 'c': out += stats['confidence_percentage']
+            elif c.isdigit(): out += format_stats_from_predefined(int(c), stats)
+            else:
+                die("malformed outformat string: unknown '%{}' token".format(c))
+        else:
+            out += "%" * (percents // 2)
+            percents = 0
+            out += c
+
+    # Treat the left overs
+    if percents != 0:
+        if percents % 2 != 0:
+            die("malformed outformat string: ended with '%'")
+        out += "%" * (percents // 2)
+    return out
+
+def print_stats(stats, outformat):
+    print(format_stats(stats, outformat))
+
+def parse_args():
+    parser = argparse.ArgumentParser(description=PROG_DESCRIPTION,
+                                    epilog=HELP_EPILOG,
+                                    formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("-f", "--file",
+                        help="Read numbers from FILE instead of stdin.",
+                        type=str)
+    parser.add_argument("-c", "--confidence",
+                        help=("Sets the confidence level. (Default is "
+                              "%(default)s)"),
+                        type=float, default=0.95, metavar="LEVEL")
+    parser.add_argument("-o", "--outformat",
+                        help=("Defines the desired output format. See output "
+                              "section bellow. (Default is '%(default)s')"),
+                        type=str, default=DEFAULT_OUTFORMAT, metavar="FORMAT")
+    parser.add_argument("-d", "--digits",
+                        help=("Rounds the output values with the given number "
+                              "of digits. Use negative for no rounding. "
+                              "(Default is 3)"),
+                        type=int, default=3)
+
+    # TRICK: use metavar="" to display only '[ ...]' instead of something
+    # like 'NUMBERS [NUMBERS ...]', which would be confusinly saying that
+    # the minimum is one value
+    parser.add_argument("-n", "--numbers",
+                        help=("Give numbers as arguments instead of reading "
+                              "from stdin."),
+                        type=float, metavar="", nargs="+")
+    parser.parse_args()
+    opts = parser.parse_args()
+    if opts.confidence > 1 or opts.confidence < 0:
+        parser.error("confidence level must be between 0 and 1")
+    if opts.numbers is not None:
+        if opts.file is not None:
+            parser.error("--file and --numbers cannot be combined")
+        if len(opts.numbers) < 2:
+            parser.error("a minimum of two numbers must be given")
+    return opts
+
+def main():
+    opts = parse_args()
+    if opts.numbers is not None:
+        numbers = opts.numbers
+    else:
+        numbers = read_numbers(opts.file)
+    stats = calc_statistics(numbers, opts.confidence)
+    stats_str = stats_to_rounded_str(stats, opts.digits)
+    print_stats(stats_str, opts.outformat)
+
+if __name__ == '__main__':
+    main()
