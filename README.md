@@ -1,7 +1,7 @@
 # `cint` - a confidence interval calculator
 
 `cint` is a simple script to calculate the confidence interval of a collection
-of numbers.
+of numbers (using the Student's t-distribution).
 
 The motivation behind it comes from the need to calculate confidence intervals
 of program runtime samples. This is a very common task when working to improve
