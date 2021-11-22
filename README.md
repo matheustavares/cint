@@ -59,12 +59,16 @@ The default output is in the format `mean ± margin of error`. But you can adjus
 the output format as you like, using the following tokens:
 
 - `%M`: sample mean
+- `%N`: sample size
 - `%S`: sample standard deviation
 - `%E`: margin of error
 - `%L`: lower limit of the confidence interval
 - `%U`: upper limit of the confidente interval
 - `%C`: the confidence level used as decimal
 - `%c`: the confidence level as a percentage
+- `%s`: sum
+- `%i`: min
+- `%a`: max
 - `%[1-4]`: use one of the predefined formats (see bellow)
 - `%%`: a single '%' character
 
