@@ -53,6 +53,9 @@ HELP_EPILOG=(
     "  %U: upper limit of the confidente interval\n"
     "  %C: the confidence level used as decimal\n"
     "  %c: the confidence level as a percentage\n"
+    "  %s: sum\n"
+    "  %i: min\n"
+    "  %a: max\n"
     "  %[1-{}]: use one of the predefined formats (see bellow)\n"
     "  %%: a single '%' character\n"
     "\n"
@@ -102,8 +105,14 @@ def calc_statistics(numbers, confidence):
     size = len(numbers)
     t_value = get_t_value(size - 1, confidence)
     margin = t_value * stdev / math.sqrt(size)
+
+    sum_value = sum(numbers)
+    min_value = min(numbers)
+    max_value = max(numbers)
+
     return {'mean': mean, 'stdev': stdev, 'margin': margin,
-            'confidence': confidence, 'size': size}
+            'confidence': confidence, 'size': size, 'sum': sum_value,
+            'min': min_value, 'max': max_value}
 
 def calc_remaining_stats(stats_v, confidence):
     mean = stats_v[0]
@@ -112,13 +121,16 @@ def calc_remaining_stats(stats_v, confidence):
     t_value = get_t_value(size - 1, confidence)
     margin = t_value * stdev / math.sqrt(size)
     return {'mean': mean, 'stdev': stdev, 'margin': margin,
-            'confidence': confidence, 'size': size}
+            'confidence': confidence, 'size': size, 'sum': 'n/a',
+            'min': 'n/a', 'max': 'n/a'}
 
 def stats_to_rounded_str(stats, digits):
     mean, margin = stats['mean'], stats['margin']
     stats['lower'], stats['upper'] = mean - margin, mean + margin
     stats['confidence_percentage'] = stats['confidence'] * 100
     def format_value(v):
+        if type(v) == str:
+            return v
         return str(v) if digits < 0 else str(round(v, digits)) 
     return {k: format_value(v) for k, v in stats.items()}
 
@@ -146,6 +158,9 @@ def format_stats(stats, outformat):
             elif c == 'U': out += stats['upper']
             elif c == 'C': out += stats['confidence']
             elif c == 'c': out += stats['confidence_percentage']
+            elif c == 's': out += stats['sum']
+            elif c == 'i': out += stats['min']
+            elif c == 'a': out += stats['max']
             elif c.isdigit(): out += format_stats_from_predefined(int(c), stats)
             else:
                 die("malformed outformat string: unknown '%{}' token".format(c))
