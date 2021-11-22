@@ -29,8 +29,7 @@ def join_from_1_with_format(format, array):
 PROG_DESCRIPTION=(
     "Reads numbers from stdin and prints their mean with "
     "confidence interval.\nThe input format must be a sequence "
-    "of two or more valid floats separated by\none or more of: "
-    "\\s, \\n, ',' or ';'."
+    "floats separated by one or more\nof: \\s, \\n, ',' or ';'."
 )
 
 PREDEFINED_FORMATS=(
@@ -78,8 +77,6 @@ def read_numbers_from_fd(fd):
     except Exception as e:
         print(str(e))
         die("invalid input format. Must be numbers only, separated by \\s, \\n or ','.")
-    if len(numbers) < 2:
-        die("a minimum of two numbers must be given")
     return numbers
 
 def read_numbers(filename):
@@ -100,15 +97,18 @@ def get_t_value(degrees, confidence=0.95):
     return t_dist.ppf((1 + confidence) / 2, degrees)
 
 def calc_statistics(numbers, confidence):
-    mean = statistics.mean(numbers)
-    stdev = statistics.stdev(numbers)
+    has_two = len(numbers) >= 2
+    has_one = len(numbers) >= 1
+
+    mean = statistics.mean(numbers) if has_one else 'n/a'
+    stdev = statistics.stdev(numbers) if has_two else 'n/a'
     size = len(numbers)
     t_value = get_t_value(size - 1, confidence)
-    margin = t_value * stdev / math.sqrt(size)
+    margin = t_value * stdev / math.sqrt(size) if has_two else 'n/a'
 
     sum_value = sum(numbers)
-    min_value = min(numbers)
-    max_value = max(numbers)
+    min_value = min(numbers) if has_one else 'n/a'
+    max_value = max(numbers) if has_one else 'n/a'
 
     return {'mean': mean, 'stdev': stdev, 'margin': margin,
             'confidence': confidence, 'size': size, 'sum': sum_value,
@@ -125,8 +125,12 @@ def calc_remaining_stats(stats_v, confidence):
             'min': 'n/a', 'max': 'n/a'}
 
 def stats_to_rounded_str(stats, digits):
-    mean, margin = stats['mean'], stats['margin']
-    stats['lower'], stats['upper'] = mean - margin, mean + margin
+    has_one = stats['size'] >= 1
+    has_two = stats['size'] >= 2
+    mean = stats['mean'] if has_one else 'n/a'
+    margin = stats['margin'] if has_one else 'n/a'
+    stats['lower'] = mean - margin if has_two else 'n/a'
+    stats['upper'] = mean + margin if has_two else 'n/a'
     stats['confidence_percentage'] = stats['confidence'] * 100
     def format_value(v):
         if type(v) == str:
@@ -199,14 +203,10 @@ def parse_args():
                               "of digits. Use negative for no rounding. "
                               "(Default is 3)"),
                         type=int, default=3)
-
-    # TRICK: use metavar="" to display only '[ ...]' instead of something
-    # like 'NUMBERS [NUMBERS ...]', which would be confusinly saying that
-    # the minimum is one value
     parser.add_argument("-n", "--numbers",
                         help=("Give numbers as arguments instead of reading "
                               "from stdin."),
-                        type=float, metavar="", nargs="+")
+                        type=float, nargs="*")
     parser.add_argument("-s", "--from-stats",
                         help=("Instead of raw data points, input pre-calculated "
                                "statistics in the format 'mean stdev size'"),
@@ -221,8 +221,6 @@ def parse_args():
     elif opts.numbers is not None:
         if opts.file is not None:
             parser.error("--file and --numbers cannot be combined")
-        if len(opts.numbers) < 2:
-            parser.error("a minimum of two numbers must be given")
     return opts
 
 def main():
