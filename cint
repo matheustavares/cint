@@ -104,6 +104,15 @@ def calc_statistics(numbers, confidence):
     return {'mean': mean, 'stdev': stdev, 'margin': margin,
             'confidence': confidence}
 
+def calc_remaining_stats(stats_v, confidence):
+    mean = stats_v[0]
+    stdev = stats_v[1]
+    size = stats_v[2]
+    t_value = get_t_value(size - 1, confidence)
+    margin = t_value * stdev / math.sqrt(size)
+    return {'mean': mean, 'stdev': stdev, 'margin': margin,
+            'confidence': confidence}
+
 def stats_to_rounded_str(stats, digits):
     mean, margin = stats['mean'], stats['margin']
     stats['lower'], stats['upper'] = mean - margin, mean + margin
@@ -181,11 +190,18 @@ def parse_args():
                         help=("Give numbers as arguments instead of reading "
                               "from stdin."),
                         type=float, metavar="", nargs="+")
+    parser.add_argument("-s", "--from-stats",
+                        help=("Instead of raw data points, input pre-calculated "
+                               "statistics in the format 'mean stdev size'"),
+                        type=float, metavar="VAL", nargs=3)
     parser.parse_args()
     opts = parser.parse_args()
     if opts.confidence > 1 or opts.confidence < 0:
         parser.error("confidence level must be between 0 and 1")
-    if opts.numbers is not None:
+    if opts.from_stats is not None:
+        if opts.numbers is not None or opts.file is not None:
+            parser.error("--from-stats cannot be combined with --numbers or --file")
+    elif opts.numbers is not None:
         if opts.file is not None:
             parser.error("--file and --numbers cannot be combined")
         if len(opts.numbers) < 2:
@@ -194,11 +210,15 @@ def parse_args():
 
 def main():
     opts = parse_args()
-    if opts.numbers is not None:
-        numbers = opts.numbers
+    if opts.from_stats:
+        stats = calc_remaining_stats(opts.from_stats, opts.confidence)
     else:
-        numbers = read_numbers(opts.file)
-    stats = calc_statistics(numbers, opts.confidence)
+        if opts.numbers is not None:
+            numbers = opts.numbers
+        else:
+            numbers = read_numbers(opts.file)
+        stats = calc_statistics(numbers, opts.confidence)
+
     stats_str = stats_to_rounded_str(stats, opts.digits)
     print_stats(stats_str, opts.outformat)
 
