@@ -46,6 +46,7 @@ HELP_EPILOG=(
     "output format:\nThe following format tokens are are recognized "
     "and properly replaced:\n"
     "  %M: sample mean\n"
+    "  %N: sample size\n"
     "  %S: sample standard deviation\n"
     "  %E: margin of error\n"
     "  %L: lower limit of the confidence interval\n"
@@ -102,7 +103,7 @@ def calc_statistics(numbers, confidence):
     t_value = get_t_value(size - 1, confidence)
     margin = t_value * stdev / math.sqrt(size)
     return {'mean': mean, 'stdev': stdev, 'margin': margin,
-            'confidence': confidence}
+            'confidence': confidence, 'size': size}
 
 def calc_remaining_stats(stats_v, confidence):
     mean = stats_v[0]
@@ -111,7 +112,7 @@ def calc_remaining_stats(stats_v, confidence):
     t_value = get_t_value(size - 1, confidence)
     margin = t_value * stdev / math.sqrt(size)
     return {'mean': mean, 'stdev': stdev, 'margin': margin,
-            'confidence': confidence}
+            'confidence': confidence, 'size': size}
 
 def stats_to_rounded_str(stats, digits):
     mean, margin = stats['mean'], stats['margin']
@@ -138,6 +139,7 @@ def format_stats(stats, outformat):
             out += "%" * (percents // 2)
             percents = 0
             if c == 'M': out += stats['mean']
+            elif c == 'N': out += stats['size']
             elif c == 'S': out += stats['stdev']
             elif c == 'E': out += stats['margin']
             elif c == 'L': out += stats['lower']
