@@ -90,7 +90,7 @@ def read_numbers(filename):
 
     numbers = read_numbers_from_fd(fd)
 
-    close(fd)
+    fd.close()
     return numbers
 
 def get_t_value(degrees, confidence=0.95):
